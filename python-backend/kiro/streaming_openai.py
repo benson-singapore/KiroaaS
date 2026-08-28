@@ -223,8 +223,16 @@ async def stream_kiro_to_openai_internal(
                     else:
                         logger.debug(f"WebSearch query (Path B): {query}")
                         
-                        # Call MCP API
-                        mcp_tool_use_id, results = await call_kiro_mcp_api(query, auth_manager)
+                        # Do not perform another network search after the per-request budget
+                        # has been exhausted. The callback still receives a synthetic result
+                        # so Kiro can produce a final answer from the results already collected.
+                        budget_check = getattr(web_search_tool_loop, "web_search_budget_available", None)
+                        if budget_check is not None and not budget_check():
+                            logger.warning("Skipping web_search because its request budget is exhausted")
+                            results = {"error": "web_search_budget_exhausted", "message": "Search budget exhausted; answer using existing results."}
+                        else:
+                            # Call MCP API
+                            mcp_tool_use_id, results = await call_kiro_mcp_api(query, auth_manager)
                         
                         if results is None:
                             logger.error("MCP API call failed for web_search")

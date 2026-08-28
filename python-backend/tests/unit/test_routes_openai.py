@@ -1404,6 +1404,64 @@ class TestContentTruncationRecovery:
 # Tests for WebSearch Support (OpenAI)
 # ==================================================================================================
 
+class TestWebSearchBudget:
+    """Tests for the bounded internal Web Search continuation loop."""
+
+    @pytest.mark.asyncio
+    async def test_budget_exhaustion_returns_tool_message_instead_of_508(self):
+        from types import SimpleNamespace
+        from kiro.models_openai import Tool, ToolFunction
+        from kiro.routes_openai import make_web_search_tool_loop
+
+        request_data = SimpleNamespace(
+            messages=[],
+            tools=[Tool(
+                type="function",
+                function=ToolFunction(
+                    name="web_search",
+                    description="Search the web",
+                    parameters={"type": "object", "properties": {}},
+                ),
+            )],
+        )
+        response_one = SimpleNamespace(status_code=200)
+        response_two = SimpleNamespace(status_code=200)
+        http_client = SimpleNamespace(
+            request_with_retry=AsyncMock(side_effect=[response_one, response_two])
+        )
+        tokenizer_messages = []
+        tool = {
+            "id": "search-call",
+            "type": "function",
+            "function": {"name": "web_search", "arguments": "{\"query\": \"one\"}"},
+        }
+
+        with patch("kiro.routes_openai.WEB_SEARCH_MAX_LOOPS", 1), \
+             patch("kiro.routes_openai.WEB_SEARCH_TIMEOUT_SECONDS", 90), \
+             patch("kiro.routes_openai.build_kiro_payload", return_value={"messages": []}):
+            continue_search = make_web_search_tool_loop(
+                request_data,
+                MagicMock(),
+                http_client,
+                "https://kiro.example/chat",
+                "conversation-id",
+                "profile-arn",
+                tokenizer_messages,
+            )
+
+            await continue_search(tool, {"results": [{"snippet": "first result"}]}, "")
+            assert continue_search.web_search_budget_available() is False
+            await continue_search(tool, {"error": "web_search_budget_exhausted"}, "")
+
+        assert len(http_client.request_with_retry.await_args_list) == 2
+        assert request_data.messages[-1].role == "tool"
+        assert "web_search_budget_exhausted" in request_data.messages[-1].content
+        assert all(
+            getattr(getattr(item, "function", None), "name", None) != "web_search"
+            for item in request_data.tools
+        )
+
+
 class TestWebSearchAutoInjectionOpenAI:
     """Tests for WebSearch auto-injection in OpenAI endpoint (Path B only)."""
     

@@ -25,6 +25,8 @@ export interface AppConfig {
   vpn_proxy_url?: string;
   first_token_timeout: number;
   streaming_read_timeout: number;
+  web_search_max_loops: number;
+  web_search_timeout_seconds: number;
   fake_reasoning: boolean;
   fake_reasoning_max_tokens: number;
   truncation_recovery: boolean;
@@ -51,6 +53,8 @@ export const DEFAULT_CONFIG: AppConfig = {
   kiro_region: 'us-east-1',
   first_token_timeout: 15,
   streaming_read_timeout: 300,
+  web_search_max_loops: 8,
+  web_search_timeout_seconds: 90,
   fake_reasoning: true,
   fake_reasoning_max_tokens: 4000,
   truncation_recovery: true,

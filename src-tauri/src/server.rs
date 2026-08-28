@@ -109,6 +109,8 @@ impl ServerManager {
             .env("KIRO_REGION", &config.kiro_region)
             .env("FIRST_TOKEN_TIMEOUT", config.first_token_timeout.to_string())
             .env("STREAMING_READ_TIMEOUT", config.streaming_read_timeout.to_string())
+            .env("WEB_SEARCH_MAX_LOOPS", config.web_search_max_loops.to_string())
+            .env("WEB_SEARCH_TIMEOUT_SECONDS", config.web_search_timeout_seconds.to_string())
             .env("FAKE_REASONING", config.fake_reasoning.to_string())
             .env("FAKE_REASONING_MAX_TOKENS", config.fake_reasoning_max_tokens.to_string())
             .env("TRUNCATION_RECOVERY", config.truncation_recovery.to_string())

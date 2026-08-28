@@ -502,6 +502,19 @@ AUTO_TRIM_PAYLOAD: bool = os.getenv("AUTO_TRIM_PAYLOAD", "false").lower() in ("t
 # Note: Native Anthropic server-side tools (Path A) work ALWAYS, regardless of this setting
 WEB_SEARCH_ENABLED: bool = os.getenv("WEB_SEARCH_ENABLED", "true").lower() in ("true", "1", "yes")
 
+# Per-request search budget. Values are clamped to safe bounds so environment
+# variables cannot accidentally enable an unbounded loop.
+def _bounded_int_env(var_name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(var_name, str(default)))
+    except (TypeError, ValueError):
+        value = default
+    return min(max(value, minimum), maximum)
+
+
+WEB_SEARCH_MAX_LOOPS: int = _bounded_int_env("WEB_SEARCH_MAX_LOOPS", 8, 1, 20)
+WEB_SEARCH_TIMEOUT_SECONDS: int = _bounded_int_env("WEB_SEARCH_TIMEOUT_SECONDS", 90, 10, 300)
+
 # ==================================================================================================
 # Account System Settings
 # ==================================================================================================

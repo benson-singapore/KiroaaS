@@ -36,7 +36,19 @@ export function useConfig() {
           needsSave = true;
         }
 
-        // Issue 3: Auto-apply detected credentials if none configured
+        // Issue 3: Normalize Web Search budgets for configs created before these settings existed.
+        const normalizedWebSearchLoops = Math.min(Math.max(Number(loadedConfig.web_search_max_loops) || 8, 1), 20);
+        const normalizedWebSearchTimeout = Math.min(Math.max(Number(loadedConfig.web_search_timeout_seconds) || 90, 10), 300);
+        if (loadedConfig.web_search_max_loops !== normalizedWebSearchLoops) {
+          loadedConfig.web_search_max_loops = normalizedWebSearchLoops;
+          needsSave = true;
+        }
+        if (loadedConfig.web_search_timeout_seconds !== normalizedWebSearchTimeout) {
+          loadedConfig.web_search_timeout_seconds = normalizedWebSearchTimeout;
+          needsSave = true;
+        }
+
+        // Issue 4: Auto-apply detected credentials if none configured
         const hasCredential = loadedConfig.refresh_token || loadedConfig.kiro_creds_file || loadedConfig.kiro_cli_db_file;
         if (!hasCredential) {
           try {

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { CheckCircle, Sparkles, X, Shuffle, Save, Shield, Key, Database, FileText, Network, Wifi, AlertTriangle, Brain, Box, Power, Wrench } from 'lucide-react';
+import { CheckCircle, Sparkles, X, Shuffle, Save, Shield, Key, Database, FileText, Network, Wifi, AlertTriangle, Brain, Box, Power, Wrench, Search } from 'lucide-react';
 import { Loader2 } from 'lucide-react';
 
 export type SettingsHintKey = 'auth_cli_db' | 'auth_creds_file' | 'auth_refresh_token' | 'proxy_api_key' | 'generate' | 'check_update' | 'save' | null;
@@ -362,11 +362,8 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
         setUpdateInfo(null);
         try {
             const data = await checkVersionUpdate(appVersion);
-            if (data) {
-                setUpdateInfo(data);
-            } else {
-                setUpdateError(t('updateCheckFailed'));
-            }
+            setUpdateInfo(data);
+            setUpdateError(data.errorMessage || null);
         } finally {
             setIsCheckingUpdate(false);
         }
@@ -526,7 +523,46 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                         />
                     </div>
                 </div>
+
+            {/* Web Search budget */}
+            <div className="bg-[#F8F8F8] p-6 rounded-[24px] space-y-4">
+                <div className="flex items-center gap-3">
+                    <Search className="h-5 w-5 text-stone-400" />
+                    <div>
+                        <Label className="text-sm font-semibold text-[#111]">{t('webSearchSettings')}</Label>
+                        <p className="text-xs text-stone-500 mt-0.5">{t('webSearchBudgetDesc')}</p>
+                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                        <Label className="text-xs text-stone-500">{t('webSearchMaxLoops')}</Label>
+                        <Input
+                            type="number"
+                            min={1}
+                            max={20}
+                            step={1}
+                            value={formData.web_search_max_loops}
+                            onChange={(e) => updateField('web_search_max_loops', Math.min(Math.max(parseInt(e.target.value, 10) || 1, 1), 20))}
+                            className="h-10 rounded-lg bg-white border-stone-200 text-sm"
+                        />
+                        <p className="text-[11px] text-stone-400">{t('webSearchMaxLoopsDesc')}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs text-stone-500">{t('webSearchTimeoutSeconds')}</Label>
+                        <Input
+                            type="number"
+                            min={10}
+                            max={300}
+                            step={1}
+                            value={formData.web_search_timeout_seconds}
+                            onChange={(e) => updateField('web_search_timeout_seconds', Math.min(Math.max(parseInt(e.target.value, 10) || 10, 10), 300))}
+                            className="h-10 rounded-lg bg-white border-stone-200 text-sm"
+                        />
+                        <p className="text-[11px] text-stone-400">{t('webSearchTimeoutDesc')}</p>
+                    </div>
+                </div>
             </div>
+
 
             {/* System — Auto-launch */}
             <div className="space-y-6 pt-4">
@@ -770,7 +806,9 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                                 {t('checkForUpdates')}
                             </span>
                             <div className="mt-1">
-                                {updateInfo?.hasUpdate ? (
+                                {updateInfo?.errorMessage || updateError ? (
+                                    <p className="text-sm text-red-500 mt-1">{updateInfo.errorMessage || updateError}</p>
+                                ) : updateInfo?.hasUpdate ? (
                                     <>
                                         <p className="text-lg font-bold text-lime-950">
                                             {t('updateAvailable').replace('{version}', `v${updateInfo.latestVersion}`)}
@@ -804,22 +842,35 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                                     {t('downloadUpdate')}
                                 </Button>
                             ) : (
-                                <Button
-                                    type="button"
-                                    onClick={handleCheckUpdate}
-                                    disabled={isCheckingUpdate || !appVersion}
-                                    size="sm"
-                                    className="rounded-xl text-xs bg-[#111] text-white hover:bg-black"
-                                >
-                                    {isCheckingUpdate ? (
-                                        <>
-                                            <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                                            {t('checkingForUpdates')}
-                                        </>
-                                    ) : (
-                                        t('checkForUpdates')
+                                <>
+                                    <Button
+                                        type="button"
+                                        onClick={handleCheckUpdate}
+                                        disabled={isCheckingUpdate || !appVersion}
+                                        size="sm"
+                                        className="rounded-xl text-xs bg-[#111] text-white hover:bg-black"
+                                    >
+                                        {isCheckingUpdate ? (
+                                            <>
+                                                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                                                {t('checkingForUpdates')}
+                                            </>
+                                        ) : (
+                                            t('checkForUpdates')
+                                        )}
+                                    </Button>
+                                    {updateInfo?.errorMessage && (
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            onClick={() => shellOpen(RELEASES_PAGE_URL).catch(() => {})}
+                                            size="sm"
+                                            className="rounded-xl text-xs"
+                                        >
+                                            {t('openReleasesPage')}
+                                        </Button>
                                     )}
-                                </Button>
+                                </>
                             )}
                             {updateInfo?.hasUpdate && (
                                 <Button

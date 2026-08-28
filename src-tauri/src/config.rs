@@ -32,6 +32,10 @@ pub struct AppConfig {
     pub vpn_proxy_url: Option<String>,
     pub first_token_timeout: f32,
     pub streaming_read_timeout: f32,
+    #[serde(default = "default_web_search_max_loops")]
+    pub web_search_max_loops: u32,
+    #[serde(default = "default_web_search_timeout_seconds")]
+    pub web_search_timeout_seconds: u32,
     pub fake_reasoning: bool,
     pub fake_reasoning_max_tokens: u32,
     pub truncation_recovery: bool,
@@ -59,6 +63,14 @@ fn default_auto_repair() -> bool {
     true
 }
 
+fn default_web_search_max_loops() -> u32 {
+    8
+}
+
+fn default_web_search_timeout_seconds() -> u32 {
+    90
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -73,6 +85,8 @@ impl Default for AppConfig {
             vpn_proxy_url: None,
             first_token_timeout: 15.0,
             streaming_read_timeout: 300.0,
+            web_search_max_loops: default_web_search_max_loops(),
+            web_search_timeout_seconds: default_web_search_timeout_seconds(),
             fake_reasoning: true,
             fake_reasoning_max_tokens: 4000,
             truncation_recovery: true,

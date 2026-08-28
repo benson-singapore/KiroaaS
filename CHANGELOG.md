@@ -2,6 +2,39 @@
 
 All notable changes to KiroaaS are documented here.
 
+## [v1.2.3] - 2026-08-28
+
+### Summary
+
+This release adds configurable OpenAI Web Search budgets, improves budget exhaustion handling, and makes GitHub Releases update failures actionable.
+
+### Added
+
+- Added Web Search settings for maximum search rounds and total search time.
+- Added regression coverage for bounded internal Web Search continuation.
+- Added localized Releases-page fallback actions in the update checker.
+
+### Changed
+
+- Made Web Search limits configurable through the application settings and safely bounded in the backend.
+- Started the search timer before the first MCP search and preserved results from searches that finish near or beyond the deadline.
+- Kept Web Search continuation inside the gateway so clients receive the final Kiro response rather than raw search output.
+
+### Fixed
+
+- Fixed budget exhaustion causing an HTTP 508 and, in streaming requests, a follow-up HTTP 500 after the response had already started.
+- Fixed update-check failures retaining stale results or showing an incorrect up-to-date state.
+- Restored the Advanced Settings Thinking toggle alongside the new Web Search controls.
+
+### Release automation
+
+- Pushing the `v1.2.3` tag creates a GitHub Release after all macOS Apple Silicon, macOS Intel, Windows x64, and Linux x64 builds succeed.
+- macOS packages use Ad-hoc signing without Apple notarization; users may need to choose Finder → Open or Privacy & Security → Open Anyway on first launch.
+
+### Commits since v1.2.2
+
+- Current working-tree changes: configurable Web Search budgets, streaming budget safeguards, update-check diagnostics, localized release actions, and regression coverage.
+
 ## [v1.2.2] - 2026-08-28
 
 ### Summary

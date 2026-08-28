@@ -27,6 +27,7 @@ Contains all API endpoints:
 """
 
 import json
+import time
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, Security
@@ -52,7 +53,7 @@ from kiro.converters_openai import build_kiro_payload
 from kiro.streaming_openai import stream_kiro_to_openai, collect_stream_response, stream_with_first_token_retry
 from kiro.http_client import KiroHttpClient
 from kiro.utils import generate_conversation_id
-from kiro.config import WEB_SEARCH_ENABLED
+from kiro.config import WEB_SEARCH_ENABLED, WEB_SEARCH_MAX_LOOPS, WEB_SEARCH_TIMEOUT_SECONDS
 from kiro.mcp_tools import handle_native_web_search
 
 # Import debug_logger
@@ -60,9 +61,6 @@ try:
     from kiro.debug_logger import debug_logger
 except ImportError:
     debug_logger = None
-
-
-MAX_INTERNAL_WEB_SEARCH_LOOPS = 3
 
 
 def make_web_search_tool_loop(
@@ -82,15 +80,36 @@ def make_web_search_tool_loop(
     output with ``finish_reason=stop``.
     """
     search_count = 0
+    search_started_at = None
+    budget_exhaustion_notified = False
+
+    def start_web_search_budget() -> None:
+        nonlocal search_started_at
+        if search_started_at is None:
+            search_started_at = time.monotonic()
 
     async def continue_after_web_search(tool: dict, results: dict, assistant_content: str):
-        nonlocal search_count
+        nonlocal search_count, budget_exhaustion_notified
 
-        if search_count >= MAX_INTERNAL_WEB_SEARCH_LOOPS:
-            raise HTTPException(
-                status_code=508,
-                detail="Maximum internal web_search loop count exceeded",
+        start_web_search_budget()
+        synthetic_budget_result = isinstance(results, dict) and results.get("error") == "web_search_budget_exhausted"
+        # A real search result is still useful even if the MCP request itself
+        # crossed the deadline. The deadline only blocks the next search.
+        budget_exhausted = synthetic_budget_result or search_count >= WEB_SEARCH_MAX_LOOPS
+        if budget_exhausted:
+            reason = (
+                f"The web search budget is exhausted ({search_count}/{WEB_SEARCH_MAX_LOOPS} searches "
+                f"or {time.monotonic() - search_started_at:.1f}/{WEB_SEARCH_TIMEOUT_SECONDS}s). "
+                "Use the search results already provided and answer the user directly. Do not request another web search."
             )
+            logger.warning("Web search budget exhausted: %s", reason)
+            request_data.tools = [
+                tool_definition for tool_definition in (request_data.tools or [])
+                if getattr(tool_definition, "function", None) is None
+                or getattr(tool_definition.function, "name", None) != "web_search"
+            ]
+            results = {"error": "web_search_budget_exhausted", "message": reason}
+            budget_exhaustion_notified = True
 
         tool_id = tool.get("id") or tool.get("toolUseId")
         if not tool_id:
@@ -119,10 +138,12 @@ def make_web_search_tool_loop(
             conversation_id,
             profile_arn,
         )
-        search_count += 1
+        if not budget_exhausted:
+            search_count += 1
         logger.info(
             "Continuing Kiro request after internal web_search "
-            f"(loop {search_count}/{MAX_INTERNAL_WEB_SEARCH_LOOPS})"
+            f"(searches {search_count}/{WEB_SEARCH_MAX_LOOPS}, "
+            f"budget {WEB_SEARCH_TIMEOUT_SECONDS}s)"
         )
 
         next_response = await http_client.request_with_retry(
@@ -142,6 +163,16 @@ def make_web_search_tool_loop(
             )
         return next_response
 
+    def web_search_budget_available() -> bool:
+        start_web_search_budget()
+        return (
+            not budget_exhaustion_notified
+            and search_count < WEB_SEARCH_MAX_LOOPS
+            and time.monotonic() - search_started_at < WEB_SEARCH_TIMEOUT_SECONDS
+        )
+
+    continue_after_web_search.start_web_search_budget = start_web_search_budget
+    continue_after_web_search.web_search_budget_available = web_search_budget_available
     return continue_after_web_search
 
 
