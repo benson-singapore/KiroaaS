@@ -14,7 +14,7 @@ import type { AppConfig } from './lib/config';
 import { useI18n } from './hooks/useI18n';
 import { useServerStatus } from './hooks/useServerStatus';
 import { useConversations } from './hooks/useConversations';
-import { startServer, stopServer, getServerLogs, getAppVersion, getDeviceModel, updateTrayServerState, getPortOccupier, terminateProcess, cloudGetSession } from './lib/tauri';
+import { startServer, stopServer, getServerLogs, getAppVersion, updateTrayServerState, getPortOccupier, terminateProcess, cloudGetSession } from './lib/tauri';
 import { checkVersionUpdate, RELEASES_PAGE_URL, type UpdateInfo } from './lib/versionCheck';
 import { open as shellOpen } from '@tauri-apps/api/shell';
 import { platform } from '@tauri-apps/api/os';
