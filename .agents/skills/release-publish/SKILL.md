@@ -38,7 +38,8 @@ Before editing anything, report:
 3. Working-tree changes and whether they will be included.
 4. The proposed new version and whether it is user-specified or automatically incremented.
 5. Whether a release workflow already exists.
-6. Required GitHub Actions secrets, especially Tauri updater signing secrets.
+6. Whether a release workflow already exists.
+7. Whether the current release mode uses Tauri updater signing. This project uses manual GitHub Releases downloads, so `TAURI_PRIVATE_KEY` and `TAURI_KEY_PASSWORD` are not required.
 
 If the user has not supplied a version, ask whether to use a specified version or automatically increment the current version. Do not guess a major/minor/patch release when the choice matters.
 
@@ -49,7 +50,7 @@ After the user confirms the version, but before remote operations:
 1. Inspect commits since the previous version baseline. If no tag exists, identify the commit or version change that established the previous version and state the fallback baseline explicitly.
 2. Synchronize all four canonical version sources.
 3. Update `CHANGELOG.md` with date, summary, added/changed/fixed sections, and a concise commit summary. Do not claim a fix or feature that is not supported by the diff or commit history.
-4. Update `releases/latest.json` only if this repository's updater endpoint requires the file. Preserve updater signatures and URLs unless the release process explicitly regenerates them.
+4. Update `releases/latest.json` only if an external updater endpoint still requires the file. In the current manual-download mode, do not fabricate updater signatures or treat this file as the client update source.
 5. Validate workflow YAML and confirm that the tag version must equal the project version.
 6. Run relevant validation: frontend build/typecheck when dependencies are available, backend targeted tests when dependencies are available, Python compilation, JSON/TOML parsing, and `git diff --check`.
 7. Show the user the complete proposed file list, release notes summary, validation results, and the exact tag that would be pushed.
@@ -85,7 +86,8 @@ Validate or create `.github/workflows/release.yml` with these properties:
 - Upload platform artifacts with `actions/upload-artifact`.
 - Create the GitHub Release only after all platform builds succeed.
 - Generate release notes from `CHANGELOG.md` and the commit range; include build artifact names.
-- Pass Tauri signing values through Actions secrets, never hard-code keys or passwords.
+- Build without Tauri updater signing secrets; macOS uses the repository's Ad-hoc identity (`signingIdentity: "-"`) and is not Apple-notarized.
+- Do not include updater signature artifacts or require `TAURI_PRIVATE_KEY`/`TAURI_KEY_PASSWORD`.
 - Fail clearly when no installer artifact is produced.
 - Use pinned major action versions and avoid transmitting project data to unrelated services.
 
@@ -100,8 +102,9 @@ After pushing the tag:
 3. Verify the GitHub Release exists and is not a draft.
 4. Verify all four platform artifact classes are attached.
 5. Verify the release title, version, date, summary, fixes, and commit list.
-6. If updater metadata is maintained in the repository or hosted endpoint, verify its version and platform URLs/signatures separately. Do not replace real signatures with placeholders.
-7. Report failures with the failed job URL and the smallest corrective action; do not silently retry a release tag or create duplicate releases.
+6. Verify that the app update checker can read the public GitHub `releases/latest` API and that its download button points to the GitHub Releases page.
+7. Do not claim automatic installation or notarized macOS trust. For Ad-hoc macOS builds, document that users may need Finder → Open or Privacy & Security → Open Anyway.
+8. Report failures with the failed job URL and the smallest corrective action; do not silently retry a release tag or create duplicate releases.
 
 ## Output format
 

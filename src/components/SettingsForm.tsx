@@ -1,9 +1,9 @@
 import { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { useI18n } from '@/hooks/useI18n';
 import type { AppConfig, AuthMethod } from '@/lib/config';
-import { scanAllCredentials, type CredentialScanResult, /* installUpdate, */ getAppVersion, startServer, stopServer, getPortOccupier, terminateProcess } from '@/lib/tauri';
+import { scanAllCredentials, type CredentialScanResult, getAppVersion, startServer, stopServer, getPortOccupier, terminateProcess } from '@/lib/tauri';
 import { open as shellOpen } from '@tauri-apps/api/shell';
-import { checkVersionUpdate, type UpdateInfo } from '@/lib/versionCheck';
+import { checkVersionUpdate, RELEASES_PAGE_URL, type UpdateInfo } from '@/lib/versionCheck';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -64,14 +64,12 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
     const [repairError, setRepairError] = useState<string | null>(null);
     const [pendingOccupier, setPendingOccupier] = useState<PendingPortOccupier | null>(null);
 
-    // Update check state
+    // GitHub Release update check state
     const [appVersion, setAppVersion] = useState('');
     const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-    // const [isInstalling, setIsInstalling] = useState(false); // TODO: 恢复 Tauri 原生更新时启用
     const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
     const [updateError, setUpdateError] = useState<string | null>(null);
 
-    // Get app version on mount
     useEffect(() => {
         getAppVersion().then(setAppVersion).catch(console.error);
     }, []);
@@ -362,34 +360,20 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
         setIsCheckingUpdate(true);
         setUpdateError(null);
         setUpdateInfo(null);
-
         try {
-            const data = await checkVersionUpdate(config, 'manual');
+            const data = await checkVersionUpdate(appVersion);
             if (data) {
                 setUpdateInfo(data);
             } else {
                 setUpdateError(t('updateCheckFailed'));
             }
-        } catch (err) {
-            setUpdateError(t('updateCheckFailed'));
         } finally {
             setIsCheckingUpdate(false);
         }
     };
 
     const handleInstallUpdate = async () => {
-        // TODO: 恢复 Tauri 原生更新逻辑
-        // setIsInstalling(true);
-        // try {
-        //     await installUpdate();
-        // } catch (err) {
-        //     setUpdateError(t('updateCheckFailed'));
-        // } finally {
-        //     setIsInstalling(false);
-        // }
-
-        // 临时：用系统浏览器打开官网下载
-        await shellOpen('https://kiroaas.hnew.city');
+        await shellOpen(RELEASES_PAGE_URL);
     };
 
     const hintEnter = (key: SettingsHintKey) => () => onHintChange?.(key);
@@ -779,22 +763,23 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                         </div>
                     </button>
 
-                    {/* Update Check Card */}
-                    <div
-                        className={`p-6 rounded-[24px] flex flex-col justify-between ${updateInfo?.hasUpdate ? 'bg-[#EBFD93]' : 'bg-[#F8F8F8]'}`}
-                        onMouseEnter={hintEnter('check_update')}
-                        onMouseLeave={hintLeave}
-                    >
+                    {/* Release information */}
+                    <div className={`p-6 rounded-[24px] flex flex-col justify-between ${updateInfo?.hasUpdate ? 'bg-[#EBFD93]' : 'bg-[#F8F8F8]'}`}>
                         <div>
                             <span className={`font-semibold text-[10px] tracking-wider uppercase ${updateInfo?.hasUpdate ? 'text-lime-800' : 'text-stone-400'}`}>
                                 {t('checkForUpdates')}
                             </span>
                             <div className="mt-1">
                                 {updateInfo?.hasUpdate ? (
-                                    <p className="text-lg font-bold text-lime-950">
-                                        v{updateInfo.latestVersion}
-                                    </p>
-                                ) : updateInfo && !updateInfo.hasUpdate ? (
+                                    <>
+                                        <p className="text-lg font-bold text-lime-950">
+                                            {t('updateAvailable').replace('{version}', `v${updateInfo.latestVersion}`)}
+                                        </p>
+                                        {updateInfo.releaseName && (
+                                            <p className="text-xs text-lime-900 mt-1">{updateInfo.releaseName}</p>
+                                        )}
+                                    </>
+                                ) : updateInfo ? (
                                     <p className="text-sm font-medium text-stone-500 mt-1">{t('noUpdateAvailable')}</p>
                                 ) : updateError ? (
                                     <p className="text-sm text-red-500 mt-1">{updateError}</p>
@@ -802,6 +787,11 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                                     <p className="text-sm text-stone-400 mt-1">{t('checkForUpdates')}</p>
                                 )}
                             </div>
+                            {updateInfo?.hasUpdate && updateInfo.releaseNotes && (
+                                <p className="text-xs text-stone-600 mt-3 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                                    {updateInfo.releaseNotes}
+                                </p>
+                            )}
                         </div>
                         <div className="flex gap-2 mt-4">
                             {updateInfo?.hasUpdate ? (
@@ -817,7 +807,7 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                                 <Button
                                     type="button"
                                     onClick={handleCheckUpdate}
-                                    disabled={isCheckingUpdate}
+                                    disabled={isCheckingUpdate || !appVersion}
                                     size="sm"
                                     className="rounded-xl text-xs bg-[#111] text-white hover:bg-black"
                                 >
@@ -831,28 +821,21 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                                     )}
                                 </Button>
                             )}
+                            {updateInfo?.hasUpdate && (
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={handleCheckUpdate}
+                                    disabled={isCheckingUpdate}
+                                    size="sm"
+                                    className="rounded-xl text-xs"
+                                >
+                                    {t('checkForUpdates')}
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
-
-                {/* Changelog */}
-                {updateInfo?.hasUpdate && updateInfo.changelog && updateInfo.changelog.length > 0 && (
-                    <div className="bg-[#F8F8F8] p-6 rounded-[24px]">
-                        <p className="text-sm font-semibold text-[#111] mb-3">{t('changelog')}</p>
-                        <div className="space-y-3 max-h-48 overflow-y-auto">
-                            {updateInfo.changelog.map((entry) => (
-                                <div key={entry.version} className="text-sm">
-                                    <p className="font-medium text-stone-700">v{entry.version}</p>
-                                    <ul className="list-disc list-inside text-stone-500 ml-2">
-                                        {entry.changes.map((change, idx) => (
-                                            <li key={idx}>{change}</li>
-                                        ))}
-                                    </ul>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* Action Bar */}

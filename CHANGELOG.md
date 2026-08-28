@@ -16,6 +16,7 @@ This release improves cloud-account compatibility, expands localization, adds bi
 - Added usage display improvements for free-trial and bonus usage.
 - Added automatic local credential scanning and default configuration initialization.
 - Added application update checks with OS and device information.
+- Added GitHub Releases version checking with manual download links; automatic installation is intentionally disabled.
 
 ### Changed
 
@@ -41,6 +42,7 @@ This release improves cloud-account compatibility, expands localization, adds bi
   - Windows x64
   - Linux x64
 - Pushing the `v1.2.2` tag creates a GitHub Release after all platform builds succeed and uploads the generated installers and archives.
+- macOS packages use Ad-hoc signing without Apple notarization; users may need to choose Finder → Open or Privacy & Security → Open Anyway on first launch.
 
 ### Commits since v1.2.1
 

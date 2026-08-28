@@ -15,8 +15,9 @@ import { useI18n } from './hooks/useI18n';
 import { useServerStatus } from './hooks/useServerStatus';
 import { useConversations } from './hooks/useConversations';
 import { startServer, stopServer, getServerLogs, getAppVersion, getDeviceModel, updateTrayServerState, getPortOccupier, terminateProcess, cloudGetSession } from './lib/tauri';
-import { checkVersionUpdate } from './lib/versionCheck';
-import { platform, arch, version } from '@tauri-apps/api/os';
+import { checkVersionUpdate, RELEASES_PAGE_URL, type UpdateInfo } from './lib/versionCheck';
+import { open as shellOpen } from '@tauri-apps/api/shell';
+import { platform } from '@tauri-apps/api/os';
 
 // UI Components
 import { Button } from '@/components/ui/button';
@@ -65,6 +66,7 @@ export default function App() {
   const [isRestarting, setIsRestarting] = useState(false);
   const [isMac, setIsMac] = useState(true);
   const [hasCloudSession, setHasCloudSession] = useState(false);
+  const [releaseUpdate, setReleaseUpdate] = useState<UpdateInfo | null>(null);
   const [settingsStatus, setSettingsStatus] = useState<SettingsFormStatus | null>(null);
   const settingsFormRef = useRef<SettingsFormHandle>(null);
   const lastLogLineRef = useRef('');
@@ -87,6 +89,21 @@ export default function App() {
   };
   useEffect(() => { refreshCloudSession(); }, []);
 
+  // Check GitHub Releases on startup. Installation remains manual.
+  useEffect(() => {
+    if (isConfigLoading) return;
+    let cancelled = false;
+    getAppVersion()
+      .then((currentVersion) => checkVersionUpdate(currentVersion))
+      .then((update) => {
+        if (!cancelled && update?.hasUpdate) setReleaseUpdate(update);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [isConfigLoading]);
+
   // Clear pending action when server status changes to a stable state
   useEffect(() => {
     if (pendingAction === 'start' && status.status === 'running') {
@@ -107,44 +124,6 @@ export default function App() {
   useEffect(() => {
     setTempConfig(config);
   }, [config]);
-
-  // Auto version check: on app start + every 6 hours
-  useEffect(() => {
-    if (isConfigLoading) return;
-
-    // Cache device info for beforeunload
-    let cachedInfo = { currentVersion: '', platform: '', arch: '', osVersion: '', deviceModel: '' };
-    Promise.all([getAppVersion(), platform(), arch(), version(), getDeviceModel()])
-      .then(([v, p, a, o, d]) => {
-        cachedInfo = { currentVersion: v, platform: p, arch: a, osVersion: o, deviceModel: d };
-      })
-      .catch(() => {});
-
-    // 1. App start
-    checkVersionUpdate(config, 'app_start').catch(() => {});
-
-    // 3. Scheduled every 6 hours
-    const SIX_HOURS = 6 * 60 * 60 * 1000;
-    const interval = setInterval(() => {
-      checkVersionUpdate(config, 'scheduled').catch(() => {});
-    }, SIX_HOURS);
-
-    // 2. App close (beforeunload)
-    const handleBeforeUnload = () => {
-      const body = JSON.stringify({
-        ...cachedInfo,
-        clientId: config.client_id || '',
-        trigger: 'app_close',
-      });
-      navigator.sendBeacon?.('https://api.kiroaas.hnew.city/version', body);
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-    };
-  }, [isConfigLoading]);
 
   // Logs Polling
   useEffect(() => {
@@ -546,6 +525,15 @@ export default function App() {
                       </span>
                     )}
                   </h1>
+                  {releaseUpdate?.hasUpdate && (
+                    <Button
+                      variant="outline"
+                      onClick={() => shellOpen(RELEASES_PAGE_URL).catch(() => {})}
+                      className="h-9 rounded-full px-4 text-xs font-semibold border-lime-500 bg-lime-100 text-lime-900 hover:bg-lime-200"
+                    >
+                      {t('updateAvailable').replace('{version}', `v${releaseUpdate.latestVersion}`)}
+                    </Button>
+                  )}
                   {configError && (
                     <Badge variant="destructive" className="rounded-full px-3 py-1">{t('configurationError')}</Badge>
                   )}

@@ -129,9 +129,6 @@ jobs:
 
       - name: Build Tauri bundles
         shell: bash
-        env:
-          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
-          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
         run: npm run tauri:build -- --target "${{ matrix.target }}"
 
       - name: Collect platform artifacts
@@ -144,10 +141,9 @@ jobs:
             bundle_dir="src-tauri/target/release/bundle"
           fi
           find "$bundle_dir" -type f \( \
-            -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \
+            -name '*.dmg' -o -name '*.app.tar.gz' \
             -o -name '*.msi' -o -name '*.msi.zip' -o -name '*.exe' \
             -o -name '*.AppImage' -o -name '*.AppImage.tar.gz' -o -name '*.deb' \
-            -o -name '*.sig' \
           \) -exec cp {} "release/${{ matrix.artifact }}/" \;
           if ! find "release/${{ matrix.artifact }}" -type f -print -quit | grep -q .; then
             echo "No bundle artifacts found under $bundle_dir" >&2
