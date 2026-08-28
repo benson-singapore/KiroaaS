@@ -563,6 +563,8 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                 </div>
             </div>
 
+            </div>
+
 
             {/* System — Auto-launch */}
             <div className="space-y-6 pt-4">
