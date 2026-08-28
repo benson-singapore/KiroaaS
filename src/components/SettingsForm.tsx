@@ -809,7 +809,7 @@ export const SettingsForm = forwardRef<SettingsFormHandle, SettingsFormProps>(fu
                             </span>
                             <div className="mt-1">
                                 {updateInfo?.errorMessage || updateError ? (
-                                    <p className="text-sm text-red-500 mt-1">{updateInfo.errorMessage || updateError}</p>
+                                    <p className="text-sm text-red-500 mt-1">{updateInfo?.errorMessage || updateError}</p>
                                 ) : updateInfo?.hasUpdate ? (
                                     <>
                                         <p className="text-lg font-bold text-lime-950">
