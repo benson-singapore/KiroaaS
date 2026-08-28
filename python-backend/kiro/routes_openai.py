@@ -43,6 +43,7 @@ from kiro.models_openai import (
     OpenAIModel,
     ModelList,
     ChatCompletionRequest,
+    ChatMessage,
 )
 from kiro.auth import KiroAuthManager, AuthType
 from kiro.cache import ModelInfoCache
@@ -59,6 +60,89 @@ try:
     from kiro.debug_logger import debug_logger
 except ImportError:
     debug_logger = None
+
+
+MAX_INTERNAL_WEB_SEARCH_LOOPS = 3
+
+
+def make_web_search_tool_loop(
+    request_data,
+    auth_manager,
+    http_client,
+    url: str,
+    conversation_id: str,
+    profile_arn: str,
+    tokenizer_messages: list,
+):
+    """Return a callback that continues Kiro after an internal web search.
+
+    The MCP result is represented as a normal assistant tool call followed by a
+    tool message in the next Kiro request. It is deliberately kept inside the
+    gateway so OpenAI clients receive the model's final answer, not raw search
+    output with ``finish_reason=stop``.
+    """
+    search_count = 0
+
+    async def continue_after_web_search(tool: dict, results: dict, assistant_content: str):
+        nonlocal search_count
+
+        if search_count >= MAX_INTERNAL_WEB_SEARCH_LOOPS:
+            raise HTTPException(
+                status_code=508,
+                detail="Maximum internal web_search loop count exceeded",
+            )
+
+        tool_id = tool.get("id") or tool.get("toolUseId")
+        if not tool_id:
+            raise HTTPException(
+                status_code=502,
+                detail="web_search response did not include a tool call id",
+            )
+
+        request_data.messages = [
+            *request_data.messages,
+            ChatMessage(
+                role="assistant",
+                content=assistant_content or None,
+                tool_calls=[tool],
+            ),
+            ChatMessage(
+                role="tool",
+                tool_call_id=tool_id,
+                content=json.dumps(results, ensure_ascii=False),
+            ),
+        ]
+        tokenizer_messages[:] = [msg.model_dump() for msg in request_data.messages]
+
+        next_payload = build_kiro_payload(
+            request_data,
+            conversation_id,
+            profile_arn,
+        )
+        search_count += 1
+        logger.info(
+            "Continuing Kiro request after internal web_search "
+            f"(loop {search_count}/{MAX_INTERNAL_WEB_SEARCH_LOOPS})"
+        )
+
+        next_response = await http_client.request_with_retry(
+            "POST",
+            url,
+            next_payload,
+            stream=True,
+        )
+        if next_response.status_code != 200:
+            try:
+                error_text = (await next_response.aread()).decode("utf-8", errors="replace")
+            finally:
+                await next_response.aclose()
+            raise HTTPException(
+                status_code=next_response.status_code,
+                detail=f"Kiro API error after web_search: {error_text[:500]}",
+            )
+        return next_response
+
+    return continue_after_web_search
 
 
 # --- Security scheme ---
@@ -369,6 +453,15 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                     # Prepare data for token counting
                     messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
                     tools_for_tokenizer = [tool.model_dump() for tool in request_data.tools] if request_data.tools else None
+                    web_search_tool_loop = make_web_search_tool_loop(
+                        request_data,
+                        auth_manager,
+                        http_client,
+                        url,
+                        conversation_id,
+                        profile_arn_for_payload,
+                        messages_for_tokenizer,
+                    )
                     
                     if request_data.stream:
                         # Streaming mode
@@ -389,7 +482,8 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                                     auth_manager=auth_manager,
                                     initial_response=response,
                                     request_messages=messages_for_tokenizer,
-                                    request_tools=tools_for_tokenizer
+                                    request_tools=tools_for_tokenizer,
+                                    web_search_tool_loop=web_search_tool_loop
                                 ):
                                     yield chunk
                             except GeneratorExit:
@@ -429,7 +523,8 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                             model_cache,
                             auth_manager,
                             request_messages=messages_for_tokenizer,
-                            request_tools=tools_for_tokenizer
+                            request_tools=tools_for_tokenizer,
+                            web_search_tool_loop=web_search_tool_loop
                         )
                         
                         await http_client.close()
@@ -663,6 +758,15 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
         # Convert Pydantic models to dicts for tokenizer
         messages_for_tokenizer = [msg.model_dump() for msg in request_data.messages]
         tools_for_tokenizer = [tool.model_dump() for tool in request_data.tools] if request_data.tools else None
+        web_search_tool_loop = make_web_search_tool_loop(
+            request_data,
+            auth_manager,
+            http_client,
+            url,
+            conversation_id,
+            profile_arn_for_payload,
+            messages_for_tokenizer,
+        )
         
         if request_data.stream:
             # Streaming mode with first token retry
@@ -685,7 +789,8 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                         auth_manager=auth_manager,
                         initial_response=response,
                         request_messages=messages_for_tokenizer,
-                        request_tools=tools_for_tokenizer
+                        request_tools=tools_for_tokenizer,
+                        web_search_tool_loop=web_search_tool_loop
                     ):
                         yield chunk
                 except GeneratorExit:
@@ -731,7 +836,8 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                 model_cache,
                 auth_manager,
                 request_messages=messages_for_tokenizer,
-                request_tools=tools_for_tokenizer
+                request_tools=tools_for_tokenizer,
+                web_search_tool_loop=web_search_tool_loop
             )
             
             await http_client.close()

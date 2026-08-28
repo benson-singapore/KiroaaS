@@ -1,0 +1,228 @@
+name: Release KiroaaS
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-22.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag matches project version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          project_version="$(node -p "require('./package.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [[ "$project_version" != "$tag_version" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${project_version}" >&2
+            exit 1
+          fi
+          if [[ "$(awk -F'"' '/version =/{print $2; exit}' src-tauri/Cargo.toml)" != "$project_version" ]]; then
+            echo "Cargo.toml version does not match package.json" >&2
+            exit 1
+          fi
+          if [[ "$(node -p "require('./src-tauri/tauri.conf.json').package.version")" != "$project_version" ]]; then
+            echo "tauri.conf.json version does not match package.json" >&2
+            exit 1
+          fi
+          echo "version=$project_version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS Apple Silicon
+            os: macos-14
+            target: aarch64-apple-darwin
+            artifact: macos-aarch64
+          - name: macOS Intel
+            os: macos-13
+            target: x86_64-apple-darwin
+            artifact: macos-x86_64
+          - name: Windows x64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+            artifact: windows-x86_64
+          - name: Linux x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            artifact: linux-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.0-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r python-backend/requirements.txt pyinstaller
+
+      - name: Build Python backend
+        shell: bash
+        run: |
+          cd python-backend/build
+          python build.py
+
+      - name: Package backend resource
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src-tauri/resources
+          rm -f src-tauri/resources/kiro-gateway.tar.gz
+          tar -czf src-tauri/resources/kiro-gateway.tar.gz \
+            -C python-backend/build/dist kiro-gateway
+
+      - name: Build Tauri bundles
+        shell: bash
+        env:
+          TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+        run: npm run tauri:build -- --target "${{ matrix.target }}"
+
+      - name: Collect platform artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "release/${{ matrix.artifact }}"
+          bundle_dir="src-tauri/target/${{ matrix.target }}/release/bundle"
+          if [[ ! -d "$bundle_dir" ]]; then
+            bundle_dir="src-tauri/target/release/bundle"
+          fi
+          find "$bundle_dir" -type f \( \
+            -name '*.dmg' -o -name '*.app.tar.gz' -o -name '*.app.tar.gz.sig' \
+            -o -name '*.msi' -o -name '*.msi.zip' -o -name '*.exe' \
+            -o -name '*.AppImage' -o -name '*.AppImage.tar.gz' -o -name '*.deb' \
+            -o -name '*.sig' \
+          \) -exec cp {} "release/${{ matrix.artifact }}/" \;
+          if ! find "release/${{ matrix.artifact }}" -type f -print -quit | grep -q .; then
+            echo "No bundle artifacts found under $bundle_dir" >&2
+            exit 1
+          fi
+          printf 'Collected artifacts for ${{ matrix.name }}:\n'
+          find "release/${{ matrix.artifact }}" -type f -maxdepth 1 -print
+
+      - name: Upload platform artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kiroaas-${{ matrix.artifact }}
+          path: release/${{ matrix.artifact }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish GitHub Release
+    needs: [validate, build]
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: kiroaas-*
+          path: release-artifacts
+          merge-multiple: false
+
+      - name: Generate release summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ needs.validate.outputs.version }}"
+          release_date="$(date -u +%Y-%m-%d)"
+          {
+            echo "# KiroaaS v${version}"
+            echo
+            echo "Release date: ${release_date}"
+            echo
+            awk -v version="v${version}" '
+              $0 == "## [" version "]" { found=1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md
+            echo
+            echo "## Build artifacts"
+            find release-artifacts -type f -printf '%f\n' | sort | sed 's/^/- /'
+            echo
+            echo "## Commit summary since the previous release baseline"
+            if git rev-parse f26632a >/dev/null 2>&1; then
+              git log --pretty=format:'- `%h` %s' f26632a..HEAD
+            else
+              git log --pretty=format:'- `%h` %s' -20
+            fi
+          } > release-notes.md
+          cat release-notes.md
+
+      - name: Create GitHub Release and upload artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -d '' files < <(find release-artifacts -type f -print0)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No release artifacts were downloaded" >&2
+            exit 1
+          fi
+          gh release create "${GITHUB_REF_NAME}" \
+            "${files[@]}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "KiroaaS ${GITHUB_REF_NAME}" \
+            --notes-file release-notes.md

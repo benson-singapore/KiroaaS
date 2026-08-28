@@ -1,15 +1,15 @@
 {
-  "version": "1.2.1",
-  "notes": "- Add server port configuration in settings\n- Auto-scan local credentials on startup with recommended auth method\n- Auto-initialize default config on first launch\n- Report OS version and device model during update checks\n- Optimize LogViewer performance with memoization and render limiting\n- Fix default region to us-east-1 in KiroAuthManager\n- Update download button to redirect to official website",
-  "pub_date": "2026-02-10T00:00:00Z",
+  "version": "1.2.2",
+  "notes": "- Add internal OpenAI Web Search tool loop so clients receive the final Kiro answer\n- Add KiroaaS Cloud authentication and session management\n- Add profileArn discovery and chat host fallback\n- Add Vietnamese language support\n- Add billing header stripping and model compatibility fixes\n- Add GitHub Actions builds for macOS Apple Silicon, macOS Intel, Windows x64, and Linux x64\n- Fix Anthropic server-side tool block handling",
+  "pub_date": "2026-08-28T00:00:00Z",
   "platforms": {
     "darwin-x86_64": {
       "signature": "<从 .tar.gz.sig 读取>",
-      "url": "https://kiroaas.hnew.city/releases/v1.2.1/KiroaaS_x64.app.tar.gz"
+      "url": "https://kiroaas.hnew.city/releases/v1.2.2/KiroaaS_x64.app.tar.gz"
     },
     "darwin-aarch64": {
       "signature": "<从 .tar.gz.sig 读取>",
-      "url": "https://kiroaas.hnew.city/releases/v1.2.1/KiroaaS_aarch64.app.tar.gz"
+      "url": "https://kiroaas.hnew.city/releases/v1.2.2/KiroaaS_aarch64.app.tar.gz"
     }
   }
 }

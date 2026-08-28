@@ -69,6 +69,72 @@ class TestStreamKiroToOpenai:
     """Tests for stream_kiro_to_openai() generator."""
     
     @pytest.mark.asyncio
+    async def test_internal_web_search_loop_returns_final_model_response(
+        self, mock_http_client, mock_response, mock_model_cache, mock_auth_manager
+    ):
+        """Search results are fed back to Kiro instead of emitted as assistant text."""
+        next_response = AsyncMock()
+        next_response.aclose = AsyncMock()
+
+        async def mock_parse_kiro_stream(response, *args, **kwargs):
+            if response is mock_response:
+                yield KiroEvent(type="tool_use", tool_use={
+                    "id": "call_search",
+                    "type": "function",
+                    "function": {
+                        "name": "web_search",
+                        "arguments": '{"query":"Kiro news"}',
+                    },
+                })
+            else:
+                yield KiroEvent(type="content", content="Final answer from Kiro")
+                yield KiroEvent(type="usage", usage={"outputTokenCount": 4})
+
+        async def continue_after_search(tool, results, assistant_content):
+            assert tool["id"] == "call_search"
+            assert results["results"][0]["snippet"] == "raw search result"
+            return next_response
+
+        with patch("kiro.streaming_openai.parse_kiro_stream", mock_parse_kiro_stream), \
+             patch("kiro.streaming_openai.parse_bracket_tool_calls", return_value=[]), \
+             patch(
+                 "kiro.mcp_tools.call_kiro_mcp_api",
+                 new=AsyncMock(return_value=("srvtoolu_search", {
+                     "results": [{"title": "Result", "snippet": "raw search result"}],
+                     "totalResults": 1,
+                 })),
+             ):
+            chunks = []
+            async for chunk in stream_kiro_to_openai(
+                mock_http_client,
+                mock_response,
+                "claude-sonnet-4",
+                mock_model_cache,
+                mock_auth_manager,
+                web_search_tool_loop=continue_after_search,
+            ):
+                chunks.append(chunk)
+
+        output = "".join(chunks)
+        assert "Final answer from Kiro" in output
+        assert "raw search result" not in output
+        assert output.endswith("data: [DONE]\n\n")
+
+        json_chunks = [
+            json.loads(chunk[6:].strip())
+            for chunk in chunks
+            if chunk.startswith("data: ") and chunk.strip() != "data: [DONE]"
+        ]
+        assert len({chunk["id"] for chunk in json_chunks}) == 1
+        assert sum(
+            "role" in chunk["choices"][0].get("delta", {})
+            for chunk in json_chunks
+        ) == 1
+
+        mock_response.aclose.assert_called()
+        next_response.aclose.assert_called()
+
+    @pytest.mark.asyncio
     async def test_yields_content_chunks(self, mock_http_client, mock_response, mock_model_cache, mock_auth_manager):
         """
         What it does: Yields content chunks in OpenAI format.

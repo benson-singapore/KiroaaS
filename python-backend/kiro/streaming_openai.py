@@ -78,7 +78,11 @@ async def stream_kiro_to_openai_internal(
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     request_messages: Optional[list] = None,
     request_tools: Optional[list] = None,
-    conversation_id: Optional[str] = None
+    conversation_id: Optional[str] = None,
+    web_search_tool_loop: Optional[Callable[[dict, dict, str], Awaitable[httpx.Response]]] = None,
+    completion_id: Optional[str] = None,
+    created_time: Optional[int] = None,
+    first_chunk: bool = True
 ) -> AsyncGenerator[str, None]:
     """
     Internal generator for converting Kiro stream to OpenAI format.
@@ -99,7 +103,9 @@ async def stream_kiro_to_openai_internal(
         request_messages: Original request messages (for fallback token counting)
         request_tools: Original request tools (for fallback token counting)
         conversation_id: Stable conversation ID for truncation recovery (optional)
-        conversation_id: Stable conversation ID for truncation recovery (optional)
+        web_search_tool_loop: Callback that submits MCP results as a Kiro tool
+            result and returns the next Kiro response. When provided, search
+            results are not emitted as assistant text.
     
     Yields:
         Strings in SSE format: "data: {...}\\n\\n" or "data: [DONE]\\n\\n"
@@ -114,9 +120,8 @@ async def stream_kiro_to_openai_internal(
         
         data: [DONE]
     """
-    completion_id = generate_completion_id()
-    created_time = int(time.time())
-    first_chunk = True
+    completion_id = completion_id or generate_completion_id()
+    created_time = created_time or int(time.time())
     
     metering_data = None
     context_usage_percentage = None
@@ -225,7 +230,34 @@ async def stream_kiro_to_openai_internal(
                             logger.error("MCP API call failed for web_search")
                             # Continue with normal tool_use processing (will show error to user)
                         else:
-                            # Emit summary as content chunks (OpenAI format)
+                            # Complete web_search inside the gateway. The
+                            # OpenAI client must only receive the final model
+                            # response, not MCP output as assistant content.
+                            if web_search_tool_loop is not None:
+                                await response.aclose()
+                                next_response = await web_search_tool_loop(
+                                    tool, results, full_content
+                                )
+                                async for next_chunk in stream_kiro_to_openai_internal(
+                                    client,
+                                    next_response,
+                                    model,
+                                    model_cache,
+                                    auth_manager,
+                                    first_token_timeout=first_token_timeout,
+                                    request_messages=request_messages,
+                                    request_tools=request_tools,
+                                    conversation_id=conversation_id,
+                                    web_search_tool_loop=web_search_tool_loop,
+                                    completion_id=completion_id,
+                                    created_time=created_time,
+                                    first_chunk=first_chunk,
+                                ):
+                                    yield next_chunk
+                                return
+
+                            # Compatibility fallback for direct callers that
+                            # do not provide a request callback.
                             summary = generate_search_summary(query, results)
                             
                             # Send content chunks
@@ -454,7 +486,8 @@ async def stream_kiro_to_openai(
     model_cache: "ModelInfoCache",
     auth_manager: "KiroAuthManager",
     request_messages: Optional[list] = None,
-    request_tools: Optional[list] = None
+    request_tools: Optional[list] = None,
+    web_search_tool_loop: Optional[Callable[[dict, dict, str], Awaitable[httpx.Response]]] = None
 ) -> AsyncGenerator[str, None]:
     """
     Generator for converting Kiro stream to OpenAI format.
@@ -477,7 +510,8 @@ async def stream_kiro_to_openai(
     async for chunk in stream_kiro_to_openai_internal(
         client, response, model, model_cache, auth_manager,
         request_messages=request_messages,
-        request_tools=request_tools
+        request_tools=request_tools,
+        web_search_tool_loop=web_search_tool_loop,
     ):
         yield chunk
 
@@ -492,7 +526,8 @@ async def stream_with_first_token_retry(
     max_retries: int = FIRST_TOKEN_MAX_RETRIES,
     first_token_timeout: float = FIRST_TOKEN_TIMEOUT,
     request_messages: Optional[list] = None,
-    request_tools: Optional[list] = None
+    request_tools: Optional[list] = None,
+    web_search_tool_loop: Optional[Callable[[dict, dict, str], Awaitable[httpx.Response]]] = None
 ) -> AsyncGenerator[str, None]:
     """
     Streaming with automatic retry on first token timeout.
@@ -557,10 +592,11 @@ async def stream_with_first_token_retry(
             auth_manager,
             first_token_timeout=first_token_timeout,
             request_messages=request_messages,
-            request_tools=request_tools
+            request_tools=request_tools,
+            web_search_tool_loop=web_search_tool_loop,
         ):
             yield chunk
-    
+
     async for chunk in stream_with_first_token_retry_core(
         make_request=make_request,
         stream_processor=stream_processor,
@@ -580,7 +616,8 @@ async def collect_stream_response(
     model_cache: "ModelInfoCache",
     auth_manager: "KiroAuthManager",
     request_messages: Optional[list] = None,
-    request_tools: Optional[list] = None
+    request_tools: Optional[list] = None,
+    web_search_tool_loop: Optional[Callable[[dict, dict, str], Awaitable[httpx.Response]]] = None
 ) -> dict:
     """
     Collect full response from streaming stream.
@@ -614,7 +651,8 @@ async def collect_stream_response(
         model_cache,
         auth_manager,
         request_messages=request_messages,
-        request_tools=request_tools
+        request_tools=request_tools,
+        web_search_tool_loop=web_search_tool_loop,
     ):
         if not chunk_str.startswith("data:"):
             continue

@@ -1,0 +1,26 @@
+{
+  "skill_name": "release-publish",
+  "evals": [
+    {
+      "id": 1,
+      "name": "version-confirmation-before-publish",
+      "prompt": "当前项目版本是 v1.2.1，我想发布一个新版本并打包 macOS、Windows 和 Linux。请先告诉我当前版本、检查项目状态，并询问我使用什么新版本号；在我确认之前不要提交、push、创建 tag 或触发 GitHub Actions。",
+      "expected_output": "报告当前版本和仓库状态，明确列出将要执行的发布步骤，并等待用户确认版本号和发布授权；不执行任何远程写操作。",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "prepare-release-without-remote-actions",
+      "prompt": "请准备 KiroaaS v1.2.2 发布：同步所有应用版本源，整理从 v1.2.1 到当前的 CHANGELOG，并检查 GitHub Actions 是否会构建 macOS ARM64、macOS Intel、Windows x64 和 Linux x64。只准备本地文件，不要 commit、push、创建 tag 或发布 Release。",
+      "expected_output": "同步四个 canonical version sources，生成或更新变更日志，验证 tag-only 发布 workflow 和四个平台，运行可用的本地检查，并清楚报告没有执行 commit/push/tag/Release。",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "publish-only-after-explicit-authorization",
+      "prompt": "我已经确认版本为 v1.2.2，并明确授权你提交当前发布改动、push main、创建并 push v1.2.2 tag。请执行发布，然后检查 GitHub Actions 和 GitHub Release 是否成功，最后总结新增功能、修改内容和修复的 bug。",
+      "expected_output": "重新检查工作区和版本一致性后，创建聚焦提交并 push 分支和 annotated tag；报告 Actions/Release 链接和状态，并给出基于提交与变更日志的发布总结。",
+      "files": []
+    }
+  ]
+}
