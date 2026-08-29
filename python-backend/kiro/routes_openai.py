@@ -176,6 +176,30 @@ def make_web_search_tool_loop(
     return continue_after_web_search
 
 
+def _format_streaming_error(error: Exception) -> str:
+    """Format an error as an OpenAI-compatible SSE event.
+
+    Streaming responses have already sent their HTTP status by the time an
+    iterator error occurs, so the error must be delivered in-band instead of
+    being raised back to Starlette.
+    """
+    if isinstance(error, HTTPException):
+        status_code = error.status_code
+        message = str(error.detail)
+    else:
+        status_code = 500
+        message = str(error) or "Internal streaming error"
+
+    payload = {
+        "error": {
+            "message": message,
+            "type": "streaming_error",
+            "code": status_code,
+        }
+    }
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
 # --- Security scheme ---
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
@@ -523,10 +547,12 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                             except Exception as e:
                                 streaming_error = e
                                 try:
+                                    yield _format_streaming_error(e)
                                     yield "data: [DONE]\n\n"
                                 except Exception:
                                     pass
-                                raise
+                                # HTTP 200 has already been sent. Do not re-raise
+                                # into Starlette, which cannot change the status.
                             finally:
                                 await http_client.close()
                                 if streaming_error:
@@ -830,13 +856,13 @@ async def chat_completions(request: Request, request_data: ChatCompletionRequest
                     logger.debug("Client disconnected during streaming (GeneratorExit in routes)")
                 except Exception as e:
                     streaming_error = e
-                    # Try to send [DONE] to client before finishing
-                    # so client doesn't "hang" waiting for data
+                    # HTTP 200 has already been sent. Report the failure in-band
+                    # and finish the SSE stream without raising into Starlette.
                     try:
+                        yield _format_streaming_error(e)
                         yield "data: [DONE]\n\n"
                     except Exception:
                         pass  # Client already disconnected
-                    raise
                 finally:
                     await http_client.close()
                     # Log access log for streaming (success or error)
