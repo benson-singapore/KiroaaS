@@ -526,6 +526,8 @@ class AccountManager:
                     
                     if response.status_code == 200:
                         data = response.json()
+                        if data.get("models"):
+                            logger.info(f"DEBUG: First model from ListAvailableModels: {data['models'][0]}")
                         models_list = data.get("models", [])
                     else:
                         # Shouldn't happen (retry handles non-200), but keep for safety
