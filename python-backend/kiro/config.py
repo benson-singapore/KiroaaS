@@ -592,3 +592,41 @@ def get_kiro_q_host(region: str) -> str:
     """Return Q API host for the specified region."""
     return KIRO_Q_HOST_TEMPLATE.format(region=region)
 
+
+# ==================================================================================================
+# Model Credit Multipliers
+# ==================================================================================================
+
+# Credit multipliers for each model (relative to base unit)
+# Used in /v1/models endpoint to display credit costs
+MODEL_CREDITS: Dict[str, float] = {
+    "auto": 1.00,
+    "claude-haiku-4.5": 0.80,
+    "claude-sonnet-4": 1.00,
+    "claude-sonnet-4.5": 1.00,
+    "claude-sonnet-4.6": 1.30,
+    "claude-opus-4.5": 2.20,
+    "claude-opus-4.6": 2.20,
+    "claude-opus-4.7": 2.20,
+    "claude-opus-5": 2.20,
+    "deepseek-3.2": 0.50,
+    "glm-5": 1.00,
+    "minimax-m2.1": 0.60,
+    "minimax-m2.5": 0.80,
+    "qwen3-coder-next": 0.90,
+    "gpt-5.6-sol": 4.40,
+    "gpt-5.6-terra": 2.20,
+    "gpt-5.6-luna": 1.10,
+}
+
+def get_model_credit(model_id: str) -> float:
+    """
+    Get credit multiplier for a model.
+    
+    Args:
+        model_id: Model identifier
+    
+    Returns:
+        Credit multiplier (defaults to 1.00 if model not found)
+    """
+    return MODEL_CREDITS.get(model_id, 1.00)
