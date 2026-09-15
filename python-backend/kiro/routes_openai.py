@@ -40,7 +40,6 @@ from kiro.config import (
     APP_VERSION,
     PROFILE_ARN,
 )
-from kiro.config import get_model_credit
 from kiro.models_openai import (
     OpenAIModel,
     ModelList,
@@ -285,15 +284,31 @@ async def get_models(request: Request):
         available_model_ids = account.model_resolver.get_available_models()
     
     # Build OpenAI-compatible model list
-    openai_models = [
-        OpenAIModel(
-            id=model_id,
-            owned_by="anthropic",
-            description="Claude model via Kiro API",
-            credits=get_model_credit(model_id)
+    openai_models = []
+    for model_id in available_model_ids:
+        # Get model info from cache to extract credit
+        model_info = None
+        if request.app.state.account_system:
+            account = request.app.state.account_manager.get_first_account()
+            if account:
+                model_info = account.model_cache.get(model_id)
+        else:
+            account = request.app.state.account_manager.get_first_account()
+            if account:
+                model_info = account.model_cache.get(model_id)
+        
+        credit = None
+        if model_info and "creditCost" in model_info:
+            credit = model_info["creditCost"]
+        
+        openai_models.append(
+            OpenAIModel(
+                id=model_id,
+                owned_by="anthropic",
+                description="Claude model via Kiro API",
+                credits=credit
+            )
         )
-        for model_id in available_model_ids
-    ]
     
     return ModelList(data=openai_models)
 
