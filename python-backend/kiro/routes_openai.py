@@ -35,7 +35,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
-from kiro.config import (
+from kiro.config import get_model_credit, (
     PROXY_API_KEY,
     APP_VERSION,
     PROFILE_ARN,
@@ -297,9 +297,7 @@ async def get_models(request: Request):
             if account:
                 model_info = account.model_cache.get(model_id)
         
-        credit = None
-        if model_info and "creditCost" in model_info:
-            credit = model_info["creditCost"]
+        credit = get_model_credit(model_id)
         
         openai_models.append(
             OpenAIModel(

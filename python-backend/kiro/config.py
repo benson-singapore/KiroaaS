@@ -593,3 +593,33 @@ def get_kiro_q_host(region: str) -> str:
     return KIRO_Q_HOST_TEMPLATE.format(region=region)
 
 
+
+# ==================================================================================================
+# Model Credit Multipliers (from Kiro CLI)
+# ==================================================================================================
+
+MODEL_CREDITS: Dict[str, float] = {
+    "auto": 1.0,
+    "claude-opus-5": 2.2,
+    "claude-sonnet-5": 1.3,
+    "claude-opus-4.8": 2.2,
+    "gpt-5.6-sol": 4.4,
+    "gpt-5.6-terra": 2.2,
+    "gpt-5.6-luna": 1.1,
+    "claude-opus-4.7": 2.2,
+    "claude-opus-4.6": 2.2,
+    "claude-sonnet-4.6": 1.3,
+    "claude-opus-4.5": 2.2,
+    "claude-sonnet-4.5": 1.3,
+    "claude-sonnet-4": 1.3,
+    "claude-haiku-4.5": 0.4,
+    "deepseek-v3.2": 0.25,
+    "minimax-m2.5": 0.25,
+    "minimax-m2.1": 0.15,
+    "glm-5": 0.5,
+    "qwen3-coder-next": 0.05,
+}
+
+def get_model_credit(model_id: str) -> float:
+    """Get credit multiplier for a model (defaults to 1.0 if not found)."""
+    return MODEL_CREDITS.get(model_id, 1.0)
