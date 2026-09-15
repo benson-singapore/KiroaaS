@@ -2,6 +2,21 @@
 
 All notable changes to KiroaaS are documented here.
 
+## [v1.2.4] - 2026-09-15
+
+### Summary
+
+Dashboard now displays credit cost multiplier for each available model.
+
+### Added
+
+- Display credit multiplier (e.g., "1.00x", "2.20x") in the dashboard model selector.
+- Backend `/v1/models` endpoint returns `credits` field for each model.
+
+### Changed
+
+- Model list card in dashboard shows both model name and credit cost.
+
 ## [v1.2.3] - 2026-08-28
 
 ### Summary

@@ -12,6 +12,7 @@ interface ModelsCardProps {
 interface OpenAIModel {
   id: string;
   description?: string;
+  credits?: number;
 }
 
 interface ModelList {
@@ -152,6 +153,11 @@ export function ModelsCard({ host, port, apiKey, isRunning }: ModelsCardProps) {
                   title={m.description || m.id}
                 >
                   <span className="text-xs font-mono text-white truncate flex-1 min-w-0">{m.id}</span>
+                  {m.credits !== undefined && (
+                    <span className="text-xs text-stone-400 whitespace-nowrap">
+                      {(m.credits * 1).toFixed(2)}x credits
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={(e) => copyId(e, m.id)}

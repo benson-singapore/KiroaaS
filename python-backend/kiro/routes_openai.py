@@ -40,6 +40,7 @@ from kiro.config import (
     APP_VERSION,
     PROFILE_ARN,
 )
+from kiro.config import get_model_credit
 from kiro.models_openai import (
     OpenAIModel,
     ModelList,
@@ -288,7 +289,8 @@ async def get_models(request: Request):
         OpenAIModel(
             id=model_id,
             owned_by="anthropic",
-            description="Claude model via Kiro API"
+            description="Claude model via Kiro API",
+            credits=get_model_credit(model_id)
         )
         for model_id in available_model_ids
     ]
