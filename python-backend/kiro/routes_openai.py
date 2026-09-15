@@ -35,7 +35,8 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
 from loguru import logger
 
-from kiro.config import get_model_credit, (
+from kiro.config import (
+    get_model_credit,
     PROXY_API_KEY,
     APP_VERSION,
     PROFILE_ARN,
