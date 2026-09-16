@@ -426,15 +426,23 @@ impl ServerManager {
 
         #[cfg(debug_assertions)]
         {
-            // Development: use python from system
+            // Development: construct absolute path to venv python
+            // Get manifest_dir (src-tauri directory)
+            let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let project_root = manifest_dir.parent()
+                .ok_or("Failed to get project root")?;
+
+            let mut python_path = project_root.to_path_buf();
+            python_path.push("python-backend");
+            python_path.push("venv");
+            python_path.push("bin");
+
             #[cfg(windows)]
-            {
-                Ok("python".to_string())
-            }
+            python_path.push("python.exe");
             #[cfg(not(windows))]
-            {
-                Ok("python3".to_string())
-            }
+            python_path.push("python");
+
+            Ok(python_path.to_string_lossy().to_string())
         }
 
         #[cfg(not(debug_assertions))]

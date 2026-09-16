@@ -67,11 +67,11 @@ class ThinkingConfig:
         >>> # Default configuration (enabled with default budget)
         >>> ThinkingConfig()
         ThinkingConfig(enabled=True, budget_tokens=None)
-        
+
         >>> # Disabled by client (reasoning_effort="none" or thinking.type="disabled")
         >>> ThinkingConfig(enabled=False, budget_tokens=None)
         ThinkingConfig(enabled=False, budget_tokens=None)
-        
+
         >>> # Custom budget from client
         >>> ThinkingConfig(enabled=True, budget_tokens=8000)
         ThinkingConfig(enabled=True, budget_tokens=8000)
@@ -218,7 +218,7 @@ def extract_images_from_content(content: Any) -> List[Dict[str, Any]]:
             item_type = item.type
         else:
             continue
-        
+
         # OpenAI format: {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,..."}}
         if item_type == "image_url":
             if isinstance(item, dict):
@@ -436,18 +436,20 @@ def inject_thinking_tags(content: str, thinking_config: ThinkingConfig) -> str:
 # JSON Schema Sanitization
 # ==================================================================================================
 
-def sanitize_json_schema(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def sanitize_json_schema(schema: Optional[Dict[str, Any]], is_top_level: bool = True) -> Dict[str, Any]:
     """
     Sanitizes JSON Schema from fields that Kiro API doesn't accept.
     
     Kiro API returns 400 "Improperly formed request" error if:
     - required is an empty array []
     - additionalProperties is present in schema
+    - Top-level oneOf, allOf, anyOf (Claude Opus 5 incompatibility)
     
     This function recursively processes the schema and removes problematic fields.
     
     Args:
         schema: JSON Schema to sanitize
+        is_top_level: Whether this is the top-level call (True) or nested (False)
     
     Returns:
         Sanitized copy of schema
@@ -465,19 +467,24 @@ def sanitize_json_schema(schema: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         # Skip additionalProperties - Kiro API doesn't support it
         if key == "additionalProperties":
             continue
+
+        # Skip top-level oneOf, allOf, anyOf - Claude Opus 5 doesn't support them
+        if is_top_level and key in ("oneOf", "allOf", "anyOf"):
+            logger.debug(f"Removing top-level {key} from schema for Claude Opus 5 compatibility")
+            continue
         
         # Recursively process nested objects
         if key == "properties" and isinstance(value, dict):
             result[key] = {
-                prop_name: sanitize_json_schema(prop_value) if isinstance(prop_value, dict) else prop_value
+                prop_name: sanitize_json_schema(prop_value, is_top_level=False) if isinstance(prop_value, dict) else prop_value
                 for prop_name, prop_value in value.items()
             }
         elif isinstance(value, dict):
-            result[key] = sanitize_json_schema(value)
+            result[key] = sanitize_json_schema(value, is_top_level=False)
         elif isinstance(value, list):
             # Process lists (e.g., anyOf, oneOf)
             result[key] = [
-                sanitize_json_schema(item) if isinstance(item, dict) else item
+                sanitize_json_schema(item, is_top_level=False) if isinstance(item, dict) else item
                 for item in value
             ]
         else:

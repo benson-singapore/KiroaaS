@@ -6,7 +6,7 @@ on:
       - 'v*.*.*'
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   NODE_VERSION: '20'
@@ -41,6 +41,12 @@ jobs:
           fi
           if [[ "$(node -p "require('./src-tauri/tauri.conf.json').package.version")" != "$project_version" ]]; then
             echo "tauri.conf.json version does not match package.json" >&2
+            exit 1
+          fi
+          lock_root_version="$(node -p "require('./package-lock.json').version")"
+          lock_package_version="$(node -p "require('./package-lock.json').packages[''].version")"
+          if [[ "$lock_root_version" != "$project_version" || "$lock_package_version" != "$project_version" ]]; then
+            echo "package-lock.json version does not match package.json" >&2
             exit 1
           fi
           echo "version=$project_version" >> "$GITHUB_OUTPUT"
@@ -164,6 +170,8 @@ jobs:
     name: Publish GitHub Release
     needs: [validate, build]
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -198,8 +206,9 @@ jobs:
             find release-artifacts -type f -printf '%f\n' | sort | sed 's/^/- /'
             echo
             echo "## Commit summary since the previous release baseline"
-            if git rev-parse f26632a >/dev/null 2>&1; then
-              git log --pretty=format:'- `%h` %s' f26632a..HEAD
+            previous_tag="$(git describe --tags --abbrev=0 "${GITHUB_REF_NAME}^" 2>/dev/null || true)"
+            if [[ -n "$previous_tag" ]]; then
+              git log --pretty=format:'- `%h` %s' "${previous_tag}..HEAD"
             else
               git log --pretty=format:'- `%h` %s' -20
             fi

@@ -3,12 +3,12 @@
   "build": {
     "beforeBuildCommand": "npm run build",
     "beforeDevCommand": "npm run dev",
-    "devPath": "http://localhost:5173",
+    "devPath": "http://localhost:3000",
     "distDir": "../dist"
   },
   "package": {
     "productName": "KiroaaS",
-    "version": "1.2.4"
+    "version": "1.2.5"
   },
   "tauri": {
     "allowlist": {

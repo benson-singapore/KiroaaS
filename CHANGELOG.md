@@ -2,6 +2,30 @@
 
 All notable changes to KiroaaS are documented here.
 
+## [v1.2.5] - 2026-09-16
+
+### Summary
+
+This release improves Claude Opus 5 schema compatibility and makes local Tauri development use the project's Python virtual environment consistently.
+
+### Added
+
+- Added a root Makefile with common install, development, build, cleanup, and Docker commands.
+
+### Changed
+
+- Updated the Vite and Tauri development server configuration to use port 3000 on localhost.
+- Updated debug builds to resolve the backend Python executable from `python-backend/venv`.
+- Updated JSON Schema sanitization to remove unsupported top-level composition keywords for Claude Opus 5 while preserving nested schema processing.
+
+### Fixed
+
+- Fixed local Tauri development from depending on whichever system Python executable happens to be first on `PATH`.
+
+### Commit summary
+
+- Working-tree changes prepared for this release: schema compatibility, local Python environment resolution, development server configuration, package metadata cleanup, and developer commands.
+
 ## [v1.2.4] - 2026-09-15
 
 ### Summary
